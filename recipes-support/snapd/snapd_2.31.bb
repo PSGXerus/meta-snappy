@@ -88,6 +88,7 @@ do_compile() {
 }
 
 do_install() {
+	install -d ${D}/root
 	install -d ${D}${libdir}/snapd
 	install -d ${D}${bindir}
 	install -d ${D}${systemd_unitdir}/system
@@ -123,6 +124,7 @@ FILES_${PN} += "			\
 	${systemd_unitdir}/system/	\
 	/var/lib/snapd			\
 	/var/snap			\
+	/root				\
 	${baselib}/udev/snappy-app-dev	\
 "
 
