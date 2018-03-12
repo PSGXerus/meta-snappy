@@ -1,0 +1,37 @@
+From 53b73e77866533f1fb52eff8fddb1e7432b5577a Mon Sep 17 00:00:00 2001
+From: Jan Siegmund <jsiegmund@arri.de>
+Date: Thu, 1 Mar 2018 17:03:25 +0100
+Subject: [PATCH] snapcraft/yocto: don't use hardcoded xdelta3 path
+
+Aquire path to xdelta3 from 'which' rather than the hardcoded path.
+
+Signed-off-by: Jan Siegmund <jsiegmund@arri.de>
+---
+ snapcraft/tests/unit/test_deltas.py | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/snapcraft/tests/unit/test_deltas.py b/snapcraft/tests/unit/test_deltas.py
+index b677591..3e11987 100644
+--- a/snapcraft/tests/unit/test_deltas.py
++++ b/snapcraft/tests/unit/test_deltas.py
+@@ -17,6 +17,8 @@
+ import logging
+ import os
+ import fixtures
++import subprocess
++import sys
+ 
+ from testtools import TestCase
+ from testtools import matchers as m
+@@ -33,7 +35,7 @@ class BaseDeltaGenerationTestCase(TestCase):
+         self.fake_logger = fixtures.FakeLogger(level=logging.INFO)
+         self.useFixture(self.fake_logger)
+ 
+-        self.delta_tool_path = '/usr/bin/xdelta3'
++        self.delta_tool_path = subprocess.check_output(['which','xdelta3']).decode(sys.getfilesystemencoding()).strip()
+         self.workdir = self.useFixture(fixtures.TempDir()).path
+         self.source_file = os.path.join(self.workdir, 'source.snap')
+         self.target_file = os.path.join(self.workdir, 'target.snap')
+-- 
+2.14.1
+
