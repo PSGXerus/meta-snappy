@@ -1,0 +1,46 @@
+From de7ec6cfc466642cfddb9fb063c5bdbdcbe67d18 Mon Sep 17 00:00:00 2001
+From: Jan Siegmund <jsiegmund@arri.de>
+Date: Mon, 5 Feb 2018 12:23:33 +0100
+Subject: [PATCH] snapcraft/yocto: don't check installed packages in yocto
+
+apt cache should not check sysroot native.
+
+Signed-off-by: Jan Siegmund <jsiegmund@arri.de>
+---
+ snapcraft/internal/lifecycle/_runner.py      | 6 +-----
+ snapcraft/internal/pluginhandler/__init__.py | 2 +-
+ 2 files changed, 2 insertions(+), 6 deletions(-)
+
+diff --git a/snapcraft/internal/lifecycle/_runner.py b/snapcraft/internal/lifecycle/_runner.py
+index adf81b4..f0f57d4 100644
+--- a/snapcraft/internal/lifecycle/_runner.py
++++ b/snapcraft/internal/lifecycle/_runner.py
+@@ -59,11 +59,7 @@ def execute(step, project_options, part_names=None):
+     :returns: A dict with the snap name, version, type and architectures.
+     """
+     config = project_loader.load_config(project_options)
+-    installed_packages = repo.Repo.install_build_packages(
+-        config.build_tools)
+-    if installed_packages is None:
+-        raise ValueError(
+-            'The repo backend is not returning the list of installed packages')
++    installed_packages = []
+ 
+     installed_snaps = repo.snaps.install_snaps(config.build_snaps)
+ 
+diff --git a/snapcraft/internal/pluginhandler/__init__.py b/snapcraft/internal/pluginhandler/__init__.py
+index d4db62c..700a8d6 100644
+--- a/snapcraft/internal/pluginhandler/__init__.py
++++ b/snapcraft/internal/pluginhandler/__init__.py
+@@ -413,7 +413,7 @@ class PluginHandler:
+     def _get_machine_manifest(self):
+         return {
+             'uname': common.run_output(['uname', '-srvmpio']),
+-            'installed-packages': repo.Repo.get_installed_packages(),
++            'installed-packages': [],
+             'installed-snaps': repo.snaps.get_installed_snaps()
+         }
+ 
+-- 
+2.14.1
+

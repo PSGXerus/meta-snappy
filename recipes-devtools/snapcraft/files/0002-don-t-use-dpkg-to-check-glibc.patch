@@ -1,0 +1,37 @@
+From 6d9b1b8cf7c811ef3e484a164f87cfcc9d4b1940 Mon Sep 17 00:00:00 2001
+From: Jan Siegmund <jsiegmund@arri.de>
+Date: Fri, 23 Feb 2018 16:13:37 +0100
+Subject: [PATCH] snapcraft/yocto: don't use dpkg to check glibc
+
+Instead of dpgk, an archtecture specific environment variable
+is now used to determine, which libcs can be used.
+
+Signed-off-by: Jan Siegmund <jsiegmund@arri.de>
+---
+ snapcraft/internal/repo/_deb.py | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/snapcraft/internal/repo/_deb.py b/snapcraft/internal/repo/_deb.py
+index 4fac3d1..1b00c87 100644
+--- a/snapcraft/internal/repo/_deb.py
++++ b/snapcraft/internal/repo/_deb.py
+@@ -161,10 +161,15 @@ class Ubuntu(BaseRepo):
+     def get_package_libraries(cls, package_name):
+         global _library_list
+         if package_name not in _library_list:
++          if package_name == "libc6":
++            output = subprocess.check_output(
++                ['find', os.environ['GLIBC_DIR_YOCTO'], '-name', '*.so*']).decode(
++                    sys.getfilesystemencoding()).strip().split()
++          else:
+             output = subprocess.check_output(
+                 ['dpkg', '-L', package_name]).decode(
+                     sys.getfilesystemencoding()).strip().split()
+-            _library_list[package_name] = {i for i in output if 'lib' in i}
++          _library_list[package_name] = {i for i in output if 'lib' in i}
+ 
+         return _library_list[package_name].copy()
+ 
+-- 
+2.14.1
+
