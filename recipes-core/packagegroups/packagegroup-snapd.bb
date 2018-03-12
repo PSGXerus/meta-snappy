@@ -5,4 +5,5 @@ inherit packagegroup
 
 RDEPENDS_${PN} = " \
   snapd \
+  gnu-hello-snap \
 "
