@@ -1,0 +1,400 @@
+From bc2b3f5a07da511f2f23f9be6cff7e2bf321e7ec Mon Sep 17 00:00:00 2001
+From: Jan Siegmund <jsiegmund@arri.de>
+Date: Mon, 26 Feb 2018 15:13:17 +0100
+Subject: [PATCH] bzr: Bump to version 2.7.1
+
+Bumping bzr to version 2.7.1 using revision 6622 as reference.
+
+Signed-off-by: Jan Siegmund <jsiegmund@arri.de>
+---
+ MANIFEST.in                                | 11 +++++-
+ Makefile                                   |  9 +----
+ bzr                                        |  4 +-
+ bzrlib/__init__.py                         |  4 +-
+ bzrlib/lazy_regex.py                       | 12 +++++-
+ bzrlib/tests/test_http.py                  | 19 +++++++++-
+ bzrlib/transport/http/_pycurl.py           |  6 ++-
+ bzrlib/transport/http/_urllib2_wrappers.py |  3 +-
+ bzrlib/transport/sftp.py                   |  3 +-
+ doc/developers/releasing.txt               | 51 +++++++++++++++++++++-----
+ doc/en/release-notes/bzr-2.7.txt           | 59 ++++++++++++++++++++++++++++++
+ 11 files changed, 153 insertions(+), 28 deletions(-)
+
+diff --git a/MANIFEST.in b/MANIFEST.in
+index 5140772..b613293 100644
+--- a/MANIFEST.in
++++ b/MANIFEST.in
+@@ -1,3 +1,12 @@
+-include bzr README setup.py
++include bzr README setup.py COPYING.txt
++# FIXME: Not needed, remove after 2.7.0 -- vila 2016-02-07
++include BRANCH.TODO bzr.ico INSTALL Makefile MANIFEST.in NEWS profile_imports.py README_BDIST_RPM .rsyncexclude .testr.conf TODO tools/bzr_epydoc tools/packaging/lp-upload-release tools/subunit-sum bzrlib/plugins/news_merge/README bzrlib/plugins/po_merge/README bzrlib/tests/ssl_certs/ca.key bzrlib/tests/ssl_certs/server.csr bzrlib/plugins/grep/.bzrignore bzrlib/plugins/grep/NEWS
++# bzr export still create some empty dirs that need to be removed
++# bzrlib/plugins/weave_fmt/tests/ bzrlib/store/revision/ doc/ja/_templates/ man1/ man1
++recursive-include tools/win32 *
+ recursive-include bzrlib *.py *.pyx *.pxd *.txt *.c *.h
+ recursive-include tools *.py *.sh
++recursive-include apport *
++recursive-include contrib *
++recursive-include doc *
++recursive-include po *
+diff --git a/Makefile b/Makefile
+index 42b6436..923ff5a 100644
+--- a/Makefile
++++ b/Makefile
+@@ -454,9 +454,6 @@ po/bzr.pot: $(PYFILES) $(DOCFILES)
+ .PHONY: dist check-dist-tarball
+ 
+ # build a distribution source tarball
+-#
+-# this method of copying the pyrex generated files is a bit ugly; it would be
+-# nicer to generate it from distutils.
+ dist: 
+ 	version=`./bzr version --short` && \
+ 	echo Building distribution of bzr $$version && \
+@@ -465,10 +462,8 @@ dist:
+ 	tarball=$$PWD/../bzr-$$version.tar.gz && \
+ 	$(MAKE) clean && \
+ 	$(MAKE) && \
+-	bzr export $$expdir && \
+-	cp bzrlib/*.c bzrlib/*.h $$expdir/bzrlib/. && \
+-	tar cfz $$tarball -C $$expbasedir bzr-$$version && \
+-	gpg --detach-sign $$tarball && \
++	$(PYTHON) setup.py sdist -d $$PWD/.. && \
++	gpg --detach-sign --armor $$tarball && \
+ 	rm -rf $$expbasedir
+ 
+ # run all tests in a previously built tarball
+diff --git a/bzr b/bzr
+index 7089004..025bee2 100755
+--- a/bzr
++++ b/bzr
+@@ -1,6 +1,6 @@
+ #! /usr/bin/env python
+ 
+-# Copyright (C) 2005-2012 Canonical Ltd
++# Copyright (C) 2005-2013, 2017 Canonical Ltd
+ #
+ # This program is free software; you can redistribute it and/or modify
+ # it under the terms of the GNU General Public License as published by
+@@ -25,7 +25,7 @@ import sys
+ import warnings
+ 
+ # update this on each release
+-_script_version = (2, 7, 0)
++_script_version = (2, 7, 1)
+ 
+ NEED_VERS = (2, 6)
+ 
+diff --git a/bzrlib/__init__.py b/bzrlib/__init__.py
+index 15523bd..7de3f30 100644
+--- a/bzrlib/__init__.py
++++ b/bzrlib/__init__.py
+@@ -1,4 +1,4 @@
+-# Copyright (C) 2005-2013, 2016 Canonical Ltd
++# Copyright (C) 2005-2013, 2016, 2017 Canonical Ltd
+ #
+ # This program is free software; you can redistribute it and/or modify
+ # it under the terms of the GNU General Public License as published by
+@@ -55,7 +55,7 @@ __copyright__ = "Copyright 2005-2012 Canonical Ltd."
+ # Python version 2.0 is (2, 0, 0, 'final', 0)."  Additionally we use a
+ # releaselevel of 'dev' for unreleased under-development code.
+ 
+-version_info = (2, 7, 0, 'final', 0)
++version_info = (2, 7, 1, 'dev', 0)
+ 
+ # API compatibility version
+ api_minimum_version = (2, 4, 0)
+diff --git a/bzrlib/lazy_regex.py b/bzrlib/lazy_regex.py
+index afd450a..3bab039 100644
+--- a/bzrlib/lazy_regex.py
++++ b/bzrlib/lazy_regex.py
+@@ -1,4 +1,4 @@
+-# Copyright (C) 2006 Canonical Ltd
++# Copyright (C) 2006, 2008-2011, 2017 Canonical Ltd
+ #
+ # This program is free software; you can redistribute it and/or modify
+ # it under the terms of the GNU General Public License as published by
+@@ -131,3 +131,13 @@ if _real_re_compile is lazy_compile:
+     raise AssertionError(
+         "re.compile has already been overridden as lazy_compile, but this would" \
+         " cause infinite recursion")
++
++
++# Some libraries calls re.finditer which fails it if receives a LazyRegex.
++if getattr(re, 'finditer', False):
++    def finditer_public(pattern, string, flags=0):
++        if isinstance(pattern, LazyRegex):
++            return pattern.finditer(string)
++        else:
++            return _real_re_compile(pattern, flags).finditer(string)
++    re.finditer = finditer_public
+diff --git a/bzrlib/tests/test_http.py b/bzrlib/tests/test_http.py
+index 151817d..74c1ca4 100644
+--- a/bzrlib/tests/test_http.py
++++ b/bzrlib/tests/test_http.py
+@@ -1,4 +1,4 @@
+-# Copyright (C) 2005-2012, 2015, 2016 Canonical Ltd
++# Copyright (C) 2005-2012, 2015, 2016, 2017 Canonical Ltd
+ #
+ # This program is free software; you can redistribute it and/or modify
+ # it under the terms of the GNU General Public License as published by
+@@ -260,6 +260,16 @@ class TestAuthHeader(tests.TestCase):
+         self.assertEqual('basic', scheme)
+         self.assertEqual('realm="Thou should not pass"', remainder)
+ 
++    def test_build_basic_header_with_long_creds(self):
++        handler = _urllib2_wrappers.BasicAuthHandler()
++        user = 'user' * 10  # length 40
++        password = 'password' * 5  # length 40
++        header = handler.build_auth_header(
++            dict(user=user, password=password), None)
++        # https://bugs.launchpad.net/bzr/+bug/1606203 was caused by incorrectly
++        # creating a header value with an embedded '\n'
++        self.assertFalse('\n' in header)
++
+     def test_basic_extract_realm(self):
+         scheme, remainder = self.parse_header(
+             'Basic realm="Thou should not pass"',
+@@ -1273,6 +1283,8 @@ class TestProxyHttpServer(http_utils.TestCaseWithTwoWebservers):
+             self.no_proxy_host = self.server_host_port
+         # The secondary server is the proxy
+         self.proxy_url = self.get_secondary_url()
++        if self._testing_pycurl():
++            self.proxy_url = self.proxy_url.replace('+pycurl', '')
+ 
+     def _testing_pycurl(self):
+         # TODO: This is duplicated for lots of the classes in this file
+@@ -1853,7 +1865,10 @@ class TestProxyAuth(TestAuth):
+                                   ])
+ 
+     def get_user_transport(self, user, password):
+-        self.overrideEnv('all_proxy', self.get_user_url(user, password))
++        proxy_url = self.get_user_url(user, password)
++        if self._testing_pycurl():
++            proxy_url = proxy_url.replace('+pycurl', '')
++        self.overrideEnv('all_proxy', proxy_url)
+         return TestAuth.get_user_transport(self, user, password)
+ 
+     def test_empty_pass(self):
+diff --git a/bzrlib/transport/http/_pycurl.py b/bzrlib/transport/http/_pycurl.py
+index 612123d..64be2ac 100644
+--- a/bzrlib/transport/http/_pycurl.py
++++ b/bzrlib/transport/http/_pycurl.py
+@@ -1,4 +1,4 @@
+-# Copyright (C) 2006-2010 Canonical Ltd
++# Copyright (C) 2006-2011, 2017 Canonical Ltd
+ #
+ # This program is free software; you can redistribute it and/or modify
+ # it under the terms of the GNU General Public License as published by
+@@ -85,6 +85,9 @@ def _get_pycurl_errcode(symbol, default):
+     """
+     return pycurl.__dict__.get(symbol, default)
+ 
++# Yes, weird but returned on weird http error (invalid status line)
++CURLE_FTP_WEIRD_SERVER_REPLY = _get_pycurl_errcode(
++    'E_FTP_WEIRD_SERVER_REPLY', 8)
+ CURLE_COULDNT_CONNECT = _get_pycurl_errcode('E_COULDNT_CONNECT', 7)
+ CURLE_COULDNT_RESOLVE_HOST = _get_pycurl_errcode('E_COULDNT_RESOLVE_HOST', 6)
+ CURLE_COULDNT_RESOLVE_PROXY = _get_pycurl_errcode('E_COULDNT_RESOLVE_PROXY', 5)
+@@ -397,6 +400,7 @@ class PyCurlTransport(HttpTransportBase):
+             if e[0] in (CURLE_COULDNT_RESOLVE_HOST,
+                         CURLE_COULDNT_RESOLVE_PROXY,
+                         CURLE_COULDNT_CONNECT,
++                        CURLE_FTP_WEIRD_SERVER_REPLY,
+                         CURLE_GOT_NOTHING,
+                         CURLE_SSL_CACERT,
+                         CURLE_SSL_CACERT_BADFILE,
+diff --git a/bzrlib/transport/http/_urllib2_wrappers.py b/bzrlib/transport/http/_urllib2_wrappers.py
+index 8eb3fab..0888912 100644
+--- a/bzrlib/transport/http/_urllib2_wrappers.py
++++ b/bzrlib/transport/http/_urllib2_wrappers.py
+@@ -48,6 +48,7 @@ DEBUG = 0
+ # actual code more or less do that, tests should be written to
+ # ensure that.
+ 
++import base64
+ import errno
+ import httplib
+ import os
+@@ -1491,7 +1492,7 @@ class BasicAuthHandler(AbstractAuthHandler):
+ 
+     def build_auth_header(self, auth, request):
+         raw = '%s:%s' % (auth['user'], auth['password'])
+-        auth_header = 'Basic ' + raw.encode('base64').strip()
++        auth_header = 'Basic ' + base64.b64encode(raw)
+         return auth_header
+ 
+     def extract_realm(self, header_value):
+diff --git a/bzrlib/transport/sftp.py b/bzrlib/transport/sftp.py
+index 6c57f91..9b87da0 100644
+--- a/bzrlib/transport/sftp.py
++++ b/bzrlib/transport/sftp.py
+@@ -410,8 +410,9 @@ class SFTPTransport(ConnectedTransport):
+         try:
+             path = self._remote_path(relpath)
+             f = self._get_sftp().file(path, mode='rb')
++            size = f.stat().st_size
+             if self._do_prefetch and (getattr(f, 'prefetch', None) is not None):
+-                f.prefetch()
++                f.prefetch(size)
+             return f
+         except (IOError, paramiko.SSHException), e:
+             self._translate_io_exception(e, path, ': error retrieving',
+diff --git a/doc/developers/releasing.txt b/doc/developers/releasing.txt
+index 60b07e3..b6ec90b 100644
+--- a/doc/developers/releasing.txt
++++ b/doc/developers/releasing.txt
+@@ -513,7 +513,7 @@ Announcing the source freeze
+ ----------------------------
+ 
+ #. Post to the ``bazaar@lists.canonical.com`` and
+-   ``bzr-packagers@list.launchpad.net`` lists, saying that the source has
++   ``bzr-packagers@lists.launchpad.net`` lists, saying that the source has
+    been frozen. Be extra clear that this is only a *source* release targeted
+    at packagers and installer builders (see
+    <https://bugs.launchpad.net/launchpad/+bug/645084>).  This is the cue for
+@@ -551,12 +551,12 @@ available to the world.
+    <http://doc.bazaar.canonical.com>.  It should be automatically build when
+    the branch is created, by a cron script ``update-bzr-docs`` on
+    ``escudero``. When the first release is created in a new series, a branch
+-   needs to be created on zhongshan::
++   needs to be created on ``escudero``::
+ 
+-     ssh zhongshan.canonical.com
++     ssh escudero.canonical.com
+      sudo -u bzr-web -s
+      cd /srv/doc.bazaar.canonical.com/
+-     bzr branch http://bazaar.launchpad.net/~bzr-pqm/bzr/2.6 bzr/bzr.2.6
++     bzr branch lp:bzr/2.7 bzr/bzr.2.7
+ 
+    And the ``bzr/bin/update-bzr-docs`` script needs to refer to it.
+ 
+@@ -640,17 +640,48 @@ Now that the release is publicly available, tell people about it.
+ #. Update `<http://en.wikipedia.org/wiki/Bazaar_(software)>`_ -- this should
+    be done for the stable and beta releases.
+ 
+-#. Update the python package index: <http://pypi.python.org/pypi/bzr> - best
+-   done by running ::
++#. Update the python package index: <http://pypi.python.org/pypi/bzr>
+ 
+-       python setup.py register
++   From the tarball created and tested earlier ::
++
++     twine upload -s ../bzr-2.7.0.tar.gz
+ 
+    Remember to check the results afterward -- this should be done for
+    stable releases but not for beta releases nor SRUs.
+ 
+-   To be able to register the release you must create an account on
+-   <http://pypi.python.org/pypi> and have one of the existing owners of
+-   the project add you to the group.
++   The ``twine`` command is provided by the ``twine`` package on Debian and
++   Ubuntu.
++
++   If in doubt, you can test with <https://testpypi.python.org/pypi> where
++   you can register yourself, register the bzr project and upload (and then
++   remove the upload and delete the project so a new release manager can
++   enjoy the same facilities). If the project already exists, have one of
++   the existing owners of the project add you to the group.
++
++   To use the pypi test site, you need to record your credentials for an
++   existing user (the registration process is manual and starts at
++   <https://testpypi.python.org/pypi?%3Aaction=register_form>.
++
++   Once registered, you can record your crdentials in your ``~/pypirc`` file
++   with ::
++
++     [testpypi]
++     username:<login on testpypi>
++     password:<password on testpypi>
++     repository = https://testpypi.python.org/pypi
++
++   Registering the bzr project if doesn't exist is achieved with::
++
++     python setup.py -r https://testpypi.python.org/pypi register
++
++  Uploading is done with::
++
++    twine upload -r testpypi -s ../bzr-2.7.0.tar.gz
++
++   To be able to upload the release you must create an account on
++   <http://pypi.python.org/pypi> and have one of the existing owners of the
++   project add you to the group and update your ``[pypi]`` section in your
++   ``~/pypirc`` file.
+ 
+ 
+ Merging the released code back to trunk
+diff --git a/doc/en/release-notes/bzr-2.7.txt b/doc/en/release-notes/bzr-2.7.txt
+index fe34225..bf29774 100644
+--- a/doc/en/release-notes/bzr-2.7.txt
++++ b/doc/en/release-notes/bzr-2.7.txt
+@@ -5,6 +5,65 @@ Bazaar Release Notes
+ .. toctree::
+    :maxdepth: 1
+ 
++bzr 2.7.1
++#########
++
++:2.7.1: NOT RELEASED YET
++
++
++External Compatibility Breaks
++*****************************
++
++None.
++
++New Features
++************
++
++None.
++
++Improvements
++************
++
++None.
++
++
++Bug Fixes
++*********
++
++* Complete monkey-patching of re.finditer or LazyRegexps leak.
++  (Vincent Ladeuil, #1644003, #1657238)
++
++* Cope with paramiko making argument to SFTPFile.prefetch() mandatory.
++  (Jelmer Vernooij, #1579093)
++
++Documentation
++*************
++
++* Clarify pypi uploads for releases. (Vincent Ladeuil, #1542903)
++
++API Changes
++***********
++
++None.
++
++Internals
++*********
++
++None.
++
++Changed Behaviour
++*****************
++
++None.
++
++Testing
++*******
++
++* Recent versions of pycurl started being stricter about the proxy url,
++  using 'http+pycurl:' is not allowed anymore and should just be 'http:'
++  (Vincent Ladeuil, #1645017).
++
++
+ bzr 2.7.0
+ #########
+ 
+-- 
+2.14.1
+
